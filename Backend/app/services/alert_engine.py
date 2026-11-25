@@ -7,7 +7,7 @@ Responsibilities
 ────────────────
 1. Receive a ProcessingContext (produced by event_processor) and evaluate
    every active rule against it.
-2. For each rule that fires, create an Alert ORM row in SQLite.
+2. For each rule that fires, create an Alert ORM row in the database.
 3. Deduplicate: a rule may not produce a second alert for the same logical
    event.  Deduplication is keyed on a deterministic string stored in
    Alert.dedup_key.

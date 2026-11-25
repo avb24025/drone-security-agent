@@ -2,7 +2,8 @@
 app/database.py
 ---------------
 SQLAlchemy engine, session factory, and declarative base.
-Supports both PostgreSQL (Neon, production) and SQLite (local / tests).
+Database: Neon PostgreSQL (production and local).
+Tests create their own isolated in-memory databases and never touch this module.
 """
 
 from __future__ import annotations
@@ -10,7 +11,7 @@ from __future__ import annotations
 import logging
 from typing import Generator
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import get_settings
@@ -25,33 +26,14 @@ class Base(DeclarativeBase):
 
 def _get_engine():
     settings = get_settings()
-    url = settings.database_url
 
-    if url.startswith("sqlite"):
-        # SQLite — used for local dev and tests only
-        engine = create_engine(
-            url,
-            connect_args={"check_same_thread": False},
-            echo=False,
-        )
-
-        @event.listens_for(engine, "connect")
-        def set_sqlite_pragma(dbapi_conn, _record):
-            cursor = dbapi_conn.cursor()
-            cursor.execute("PRAGMA journal_mode=WAL")
-            cursor.execute("PRAGMA foreign_keys=ON")
-            cursor.close()
-
-    else:
-        # PostgreSQL (Neon) — production
-        engine = create_engine(
-            url,
-            pool_pre_ping=True,       # detects stale connections
-            pool_size=1,              # keep pool small for serverless
-            max_overflow=0,
-            echo=False,
-        )
-
+    engine = create_engine(
+        settings.database_url,
+        pool_pre_ping=True,    # drops stale connections before use
+        pool_size=1,           # small pool — safe for Vercel serverless
+        max_overflow=0,
+        echo=False,
+    )
     return engine
 
 
@@ -65,7 +47,7 @@ SessionLocal = sessionmaker(
 
 
 def init_db() -> None:
-    """Create all tables that do not yet exist."""
+    """Create all tables that do not yet exist in the Neon database."""
     import app.models.db_models  # noqa: F401
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables verified / created.")

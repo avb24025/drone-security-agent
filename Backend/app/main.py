@@ -6,7 +6,7 @@ FastAPI application entry point.
 Startup sequence
 ────────────────
 1. Configure logging.
-2. Initialise SQLite (create tables if absent).
+2. Initialise Neon PostgreSQL (create tables if absent).
 3. Mount all API routers.
 4. Add CORS middleware for the React frontend.
 5. Add a health-check endpoint.

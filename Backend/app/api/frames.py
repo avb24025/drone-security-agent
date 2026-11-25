@@ -89,7 +89,7 @@ def process_single_frame(
     - Sends the description to Gemini for analysis.
     - Extracts structured events and maintains context.
     - Evaluates security rules and creates alerts.
-    - Persists everything in SQLite.
+    - Persists everything in Neon PostgreSQL.
     """
     cfg = AlertEngineConfig.from_settings()
     try:

@@ -6,7 +6,7 @@ Event extraction and context management service.
 Responsibilities
 ────────────────
 1. Receive a DroneFrame + its GeminiAnalysis and produce one or more
-   structured Event ORM rows that are persisted in SQLite.
+   structured Event ORM rows that are persisted in the database.
 2. Store the Frame itself (idempotent — re-processing the same frame_id
    updates the record rather than duplicating it).
 3. Maintain cross-frame context by querying the database for prior

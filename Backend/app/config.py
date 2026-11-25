@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     groq_model: str = "qwen/qwen3.8-27b"
 
     # ── Database ──────────────────────────────────────────────────────────────
-    database_url: str = "sqlite:///./drone_security.db"
+    database_url: str = "postgresql://localhost/drone_security"
 
     # ── CORS ──────────────────────────────────────────────────────────────────
     frontend_origin: str = "http://localhost:5173"
