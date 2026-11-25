@@ -90,7 +90,7 @@ Alerts are deduplicated using a SHA-256 keyed `dedup_key` stored in a UNIQUE dat
 |---|---|
 | Web framework | FastAPI 0.111 |
 | ORM | SQLAlchemy 2.0 |
-| Database | SQLite |
+| Database | Neon PostgreSQL (via SQLAlchemy 2.0 + psycopg2) |
 | Data validation | Pydantic v2 |
 | AI — frame analysis & chatbot | Groq SDK (`groq`) + `qwen/qwen3.8-27b` |
 | AI agent framework | LangChain 0.2 + `langchain-groq` |
@@ -140,7 +140,7 @@ Alerts are deduplicated using a SHA-256 keyed `dedup_key` stored in a UNIQUE dat
                           │                      │
                           ▼                      ▼
                   ┌──────────────────────────────────┐
-                  │         SQLite Database          │
+                  │      Neon PostgreSQL Database    │
                   │  frames │ events │ alerts         │
                   └──────────────────────────────────┘
 ```
@@ -357,20 +357,26 @@ Create a file named `.env` inside the `Backend/` folder. This file is listed in 
 # Backend/.env
 
 GROQ_API_KEY=gsk_your_actual_key_here
+DATABASE_URL=postgresql://user:password@host/dbname?sslmode=require&channel_binding=require
 ```
 
-That single line is all that is required. All other settings have working defaults:
+Two variables are required. All others have working defaults:
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `GROQ_MODEL` | `qwen/qwen3.8-27b` | Groq model for analysis and chat |
-| `DATABASE_URL` | `sqlite:///./drone_security.db` | SQLite file path |
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | CORS origin |
 | `RESTRICTED_HOUR_START` | `22` | Start of restricted hours (10 PM) |
 | `RESTRICTED_HOUR_END` | `6` | End of restricted hours (6 AM) |
 | `LOITERING_MIN_FRAMES` | `2` | Sightings before loitering alert fires |
 | `AUTHORIZED_VEHICLES` | `blue Ford F150,white Toyota Camry` | Vehicles exempt from unauthorized alert |
 | `LOG_LEVEL` | `INFO` | Logging verbosity |
+
+**Getting a Neon database URL:**
+1. Go to [https://console.neon.tech](https://console.neon.tech)
+2. Create a free project
+3. Go to **Connection Details** → copy the **Pooled connection string**
+4. It looks like: `postgresql://user:pass@host-pooler.region.aws.neon.tech/dbname?sslmode=require&channel_binding=require`
 
 See `Backend/.env.example` for a complete annotated example.
 
@@ -391,7 +397,7 @@ INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
 INFO:     Application startup complete.
 ```
 
-The SQLite database file `Backend/drone_security.db` is created automatically on first run.
+The Neon PostgreSQL database tables are created automatically on first run via SQLAlchemy's `create_all()`.
 
 **Verify the server is running:**
 
@@ -482,11 +488,13 @@ curl -X POST http://localhost:8000/api/frames/process \
 
 ### Clearing the database
 
-To reset all data and start fresh:
+To reset all data and start fresh (drops and recreates all tables on Neon):
 
 ```bash
 cd Backend
 python -c "
+from dotenv import load_dotenv
+load_dotenv()
 from app.database import engine
 from app.models.db_models import Base
 Base.metadata.drop_all(bind=engine)
@@ -499,7 +507,7 @@ print('Database cleared.')
 
 ## 14. Running Tests
 
-All tests use in-memory SQLite and mocked Groq API calls. No API key is needed to run tests.
+All tests use isolated in-memory databases and mocked Groq API calls. No API key or Neon connection is needed to run tests.
 
 ```bash
 cd Backend
@@ -541,7 +549,7 @@ Groq is used for both frame analysis and the chatbot agent. It was chosen over o
 The `gemini_service.py` module (name kept for schema compatibility) sends a structured prompt to Groq containing the frame metadata and description. The model returns a JSON object identifying objects, activities, event type, and a suspiciousness flag. Temperature is set to 0.6 for factual output. The system instruction explicitly forbids hallucinating vehicle attributes — absent fields must be `null`.
 
 **Chatbot agent usage:**
-The LangChain agent uses `ChatGroq` as its LLM. The agent runs a tool-calling loop: Groq decides which of the six database tools to invoke, tools query SQLite and return structured JSON, then Groq synthesises a grounded natural-language answer. This keeps every answer traceable to real database records.
+The LangChain agent uses `ChatGroq` as its LLM. The agent runs a tool-calling loop: Groq decides which of the six database tools to invoke, tools query the Neon PostgreSQL database and return structured JSON, then Groq synthesises a grounded natural-language answer. This keeps every answer traceable to real database records.
 
 **Impact on workflow:**
 Switching from Gemini to Groq resolved the daily quota limitation (Gemini free tier: 20 requests/day). Groq's higher free-tier limits allowed processing all 20 simulated frames in a single session during development and testing.
