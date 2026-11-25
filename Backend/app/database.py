@@ -1,8 +1,8 @@
 """
 app/database.py
-───────────────
+---------------
 SQLAlchemy engine, session factory, and declarative base.
-All ORM models import Base from here.
+Supports both PostgreSQL (Neon, production) and SQLite (local / tests).
 """
 
 from __future__ import annotations
@@ -25,25 +25,32 @@ class Base(DeclarativeBase):
 
 def _get_engine():
     settings = get_settings()
-    connect_args = {}
-    if settings.database_url.startswith("sqlite"):
-        # Required for SQLite to work correctly with FastAPI's thread model.
-        connect_args = {"check_same_thread": False}
+    url = settings.database_url
 
-    engine = create_engine(
-        settings.database_url,
-        connect_args=connect_args,
-        echo=False,           # Set True to log all SQL statements during debug
-    )
+    if url.startswith("sqlite"):
+        # SQLite — used for local dev and tests only
+        engine = create_engine(
+            url,
+            connect_args={"check_same_thread": False},
+            echo=False,
+        )
 
-    # Enable WAL mode for better concurrent read performance on SQLite.
-    if settings.database_url.startswith("sqlite"):
         @event.listens_for(engine, "connect")
-        def set_sqlite_pragma(dbapi_conn, _connection_record):
+        def set_sqlite_pragma(dbapi_conn, _record):
             cursor = dbapi_conn.cursor()
             cursor.execute("PRAGMA journal_mode=WAL")
             cursor.execute("PRAGMA foreign_keys=ON")
             cursor.close()
+
+    else:
+        # PostgreSQL (Neon) — production
+        engine = create_engine(
+            url,
+            pool_pre_ping=True,       # detects stale connections
+            pool_size=1,              # keep pool small for serverless
+            max_overflow=0,
+            echo=False,
+        )
 
     return engine
 
@@ -58,22 +65,14 @@ SessionLocal = sessionmaker(
 
 
 def init_db() -> None:
-    """Create all tables that are not yet present in the database."""
-    # Import models so SQLAlchemy registers them with Base before create_all.
+    """Create all tables that do not yet exist."""
     import app.models.db_models  # noqa: F401
-
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables verified / created.")
 
 
 def get_db() -> Generator[Session, None, None]:
-    """
-    FastAPI dependency that yields a database session and closes it afterwards.
-
-    Usage in a route:
-        def my_route(db: Session = Depends(get_db)):
-            ...
-    """
+    """FastAPI dependency — yields a session and closes it after the request."""
     db = SessionLocal()
     try:
         yield db
